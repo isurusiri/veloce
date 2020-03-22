@@ -34,7 +34,7 @@ const (
 	DefaultExpiration time.Duration = 0
 )
 
-type janitor struct {
+type garbageCollector struct {
 	Interval time.Duration
 	stop     chan bool
 }
@@ -44,7 +44,7 @@ type cache struct {
 	items             map[string]Item
 	mu                sync.RWMutex
 	onEvicted         func(string, interface{})
-	janitor           *janitor
+	garbageCollector  *garbageCollector
 }
 
 // Cache represents the in memory key-value store
@@ -227,7 +227,7 @@ func (c *cache) Delete(key string) {
 	}
 }
 
-// Delete expired items from the cache.
+// DeleteExpired, deletes expired items from the cache.
 func (c *cache) DeleteExpired() {
 	var evictedItems []keyAndValue
 	now := time.Now().UnixNano()
@@ -248,8 +248,73 @@ func (c *cache) DeleteExpired() {
 	}
 }
 
+// OnEvicted, sets an function that is called with the key and value when an
+// item is evicted from the cache.
 func (c *cache) OnEvicted(f func(string, interface{})) {
 	c.mu.Lock()
 	c.onEvicted = f
 	c.mu.Unlock()
+}
+
+// Items, copies all unexpired items in the cache into a new map and return it.
+func (c *cache) Items() map[string]Item {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	cacheMap := make(map[string]Item, len(c.items))
+	now := time.Now().UnixNano()
+
+	for key, value := range c.items {
+		if value.Expiration > 0 {
+			if now > value.Expiration {
+				continue
+			}
+		}
+		cacheMap[key] = value
+	}
+	return cacheMap
+}
+
+// ItemCount, returns the count of all items in the cache including the expired
+// items.
+func (c *cache) ItemCount() int {
+	c.mu.RLock()
+	itemCount := len(c.items)
+	c.mu.RUnlock()
+	return itemCount
+}
+
+// Delete all items from the cache.
+func (c *cache) Flush() {
+	c.mu.Lock()
+	c.items = map[string]Item{}
+	c.mu.Unlock()
+}
+
+// Run the garbage collector to clean up expired items from the cache.
+func (gc *garbageCollector) Run(c *cache) {
+	ticker := time.NewTicker(gc.Interval)
+
+	for {
+		select {
+		case <-ticker.C:
+			c.DeleteExpired()
+		case <-gc.stop:
+			ticker.Stop()
+			return
+		}
+	}
+}
+
+func stopGarbageCollector(c *cache) {
+	c.garbageCollector.stop <- true
+}
+
+func runGarbageCollector(c *cache, ci time.Duration) {
+	gc := &garbageCollector{
+		Interval: ci,
+		stop:     make(chan bool),
+	}
+	c.garbageCollector = gc
+	go gc.Run(c)
 }
