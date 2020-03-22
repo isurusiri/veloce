@@ -52,6 +52,12 @@ type Cache struct {
 	*cache
 }
 
+// Represents a key value pair
+type keyAndValue struct {
+	key   string
+	value interface{}
+}
+
 // Set add an item to the cache, replacing any existing item.
 // If the duration is 0 (DefaultExpiration), the cache's default
 // expiration time is used. If it is -1 (NoExpiration), the item
@@ -196,4 +202,54 @@ func (c *cache) get(key string) (interface{}, bool) {
 	}
 
 	return item.Object, true
+}
+
+func (c *cache) delete(key string) (interface{}, bool) {
+	if c.onEvicted != nil {
+		if item, found := c.items[key]; found {
+			delete(c.items, key)
+			return item.Object, true
+		}
+	}
+
+	delete(c.items, key)
+	return nil, false
+}
+
+// Delete an item from the cache. Does nothing if the key is not
+// in the cache.
+func (c *cache) Delete(key string) {
+	c.mu.Lock()
+	item, evicted := c.delete(key)
+	c.mu.Unlock()
+	if evicted {
+		c.onEvicted(key, item)
+	}
+}
+
+// Delete expired items from the cache.
+func (c *cache) DeleteExpired() {
+	var evictedItems []keyAndValue
+	now := time.Now().UnixNano()
+
+	c.mu.Lock()
+	for key, value := range c.items {
+		if value.Expiration > 0 && now > value.Expiration {
+			oldValue, evicted := c.delete(key)
+			if evicted {
+				evictedItems = append(evictedItems, keyAndValue{key, oldValue})
+			}
+		}
+	}
+	c.mu.Unlock()
+
+	for _, value := range evictedItems {
+		c.onEvicted(value.key, value.value)
+	}
+}
+
+func (c *cache) OnEvicted(f func(string, interface{})) {
+	c.mu.Lock()
+	c.onEvicted = f
+	c.mu.Unlock()
 }
