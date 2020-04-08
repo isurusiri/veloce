@@ -11,11 +11,11 @@ import (
 
 // Cache represents the in memory key value store
 type Cache struct {
-	defaultExpiration time.Duration
-	items             map[string]models.Item
+	DefaultExpiration time.Duration
+	Items             map[string]models.Item
 	mu                sync.RWMutex
 	onEvicted         func(string, interface{})
-	garbageCollector  *GarbageCollector
+	GarbageCollector  *GarbageCollector
 }
 
 // Represents a key value pair
@@ -31,7 +31,7 @@ type keyAndValue struct {
 func (c *Cache) Set(key string, value interface{}, duration time.Duration) {
 	var expiration int64
 	if duration == globals.DefaultExpiration {
-		duration = c.defaultExpiration
+		duration = c.DefaultExpiration
 	}
 
 	if duration > 0 {
@@ -39,7 +39,7 @@ func (c *Cache) Set(key string, value interface{}, duration time.Duration) {
 	}
 
 	c.mu.Lock()
-	c.items[key] = models.Item{
+	c.Items[key] = models.Item{
 		Object:     value,
 		Expiration: expiration,
 	}
@@ -49,14 +49,14 @@ func (c *Cache) Set(key string, value interface{}, duration time.Duration) {
 func (c *Cache) set(key string, value interface{}, duration time.Duration) {
 	var expiration int64
 	if duration == globals.DefaultExpiration {
-		duration = c.defaultExpiration
+		duration = c.DefaultExpiration
 	}
 
 	if duration > 0 {
 		expiration = time.Now().Add(duration).UnixNano()
 	}
 
-	c.items[key] = models.Item{
+	c.Items[key] = models.Item{
 		Object:     value,
 		Expiration: expiration,
 	}
@@ -107,7 +107,7 @@ func (c *Cache) Replace(key string, value interface{}, duration time.Duration) e
 // indicating whether the key was found.
 func (c *Cache) Get(key string) (interface{}, bool) {
 	c.mu.RLock()
-	item, found := c.items[key]
+	item, found := c.Items[key]
 
 	if !found {
 		c.mu.RUnlock()
@@ -130,7 +130,7 @@ func (c *Cache) Get(key string) (interface{}, bool) {
 // indicating whether the key was found.
 func (c *Cache) GetWithExpiration(key string) (interface{}, time.Time, bool) {
 	c.mu.RLock()
-	item, found := c.items[key]
+	item, found := c.Items[key]
 
 	if !found {
 		c.mu.RUnlock()
@@ -155,7 +155,7 @@ func (c *Cache) GetWithExpiration(key string) (interface{}, time.Time, bool) {
 }
 
 func (c *Cache) get(key string) (interface{}, bool) {
-	item, found := c.items[key]
+	item, found := c.Items[key]
 
 	if !found {
 		return nil, false
@@ -172,13 +172,13 @@ func (c *Cache) get(key string) (interface{}, bool) {
 
 func (c *Cache) delete(key string) (interface{}, bool) {
 	if c.onEvicted != nil {
-		if item, found := c.items[key]; found {
-			delete(c.items, key)
+		if item, found := c.Items[key]; found {
+			delete(c.Items, key)
 			return item.Object, true
 		}
 	}
 
-	delete(c.items, key)
+	delete(c.Items, key)
 	return nil, false
 }
 
@@ -199,7 +199,7 @@ func (c *Cache) DeleteExpired() {
 	now := time.Now().UnixNano()
 
 	c.mu.Lock()
-	for key, value := range c.items {
+	for key, value := range c.Items {
 		if value.Expiration > 0 && now > value.Expiration {
 			oldValue, evicted := c.delete(key)
 			if evicted {
@@ -222,15 +222,15 @@ func (c *Cache) OnEvicted(f func(string, interface{})) {
 	c.mu.Unlock()
 }
 
-// Items copies all unexpired items in the cache into a new map and return it.
-func (c *Cache) Items() map[string]models.Item {
+// GetItems copies all unexpired items in the cache into a new map and return it.
+func (c *Cache) GetItems() map[string]models.Item {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	cacheMap := make(map[string]models.Item, len(c.items))
+	cacheMap := make(map[string]models.Item, len(c.Items))
 	now := time.Now().UnixNano()
 
-	for key, value := range c.items {
+	for key, value := range c.Items {
 		if value.Expiration > 0 {
 			if now > value.Expiration {
 				continue
@@ -245,7 +245,7 @@ func (c *Cache) Items() map[string]models.Item {
 // items.
 func (c *Cache) ItemCount() int {
 	c.mu.RLock()
-	itemCount := len(c.items)
+	itemCount := len(c.Items)
 	c.mu.RUnlock()
 	return itemCount
 }
@@ -253,6 +253,6 @@ func (c *Cache) ItemCount() int {
 // Flush all items from the cache.
 func (c *Cache) Flush() {
 	c.mu.Lock()
-	c.items = map[string]models.Item{}
+	c.Items = map[string]models.Item{}
 	c.mu.Unlock()
 }

@@ -7,7 +7,7 @@ import (
 // GarbageCollector provides the buleprint for garbage collector
 type GarbageCollector struct {
 	Interval time.Duration
-	stop     chan bool
+	Stop     chan bool
 }
 
 // Run the garbage collector to clean up expired items from the cache.
@@ -18,7 +18,7 @@ func (gc *GarbageCollector) Run(c *Cache) {
 		select {
 		case <-ticker.C:
 			c.DeleteExpired()
-		case <-gc.stop:
+		case <-gc.Stop:
 			ticker.Stop()
 			return
 		}

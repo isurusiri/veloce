@@ -14,15 +14,15 @@ type Cache struct {
 }
 
 func stopGarbageCollector(c *machinery.Cache) {
-	c.garbageCollector.stop <- true
+	c.GarbageCollector.Stop <- true
 }
 
 func runGarbageCollector(c *machinery.Cache, cleanUpInterval time.Duration) {
-	gc := &garbageCollector{
+	gc := &machinery.GarbageCollector{
 		Interval: cleanUpInterval,
-		stop:     make(chan bool),
+		Stop:     make(chan bool),
 	}
-	c.garbageCollector = gc
+	c.GarbageCollector = gc
 	go gc.Run(c)
 }
 
@@ -31,8 +31,8 @@ func newCache(duration time.Duration, cacheItems map[string]models.Item) *machin
 		duration = -1
 	}
 	c := &machinery.Cache{
-		defaultExpiration: duration,
-		items:             cacheItems,
+		DefaultExpiration: duration,
+		Items:             cacheItems,
 	}
 	return c
 }
